@@ -17,7 +17,7 @@ async function main() {
     let dict = {
         "0x3506424F91fD33084466F402d5D97f05F8e3b4AF": null, //tether
         "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48": null, // usdc
-        "0x6B175474E89094C44Da98b954EedeAC495271d0F": null, //dai
+        "0x6B175474E89094C44Da98b954EedeAC495271d0F": 1, //dai
         "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599": null, //wbtc
         "0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984": null, //uni
         "0x514910771AF9Ca656af840dff83E8264EcF986CA": null, //chainlink
@@ -73,31 +73,32 @@ async function main() {
     let dict1 = { "0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984": null }; //uni
 
     for(let key in dict){
-            const tokenContract = new ethers.Contract(key, permitTokenAbi['abi'], wallet);
+        if(dict[key] != null){
+            continue;
+        }
+        const tokenContract = new ethers.Contract(key, permitTokenAbi['abi'], wallet);
+        try {
+            const signature = await getCorrectPermitSig(wallet, tokenContract, spender.address, value, deadline);
+            const { v, r, s } = ethers.utils.splitSignature(signature);
+
+            const tx = await tokenContract.connect(wallet).callStatic.permit(wallet.address, spender.address, value, deadline, v, r, s, {gasLimit: 2000000});
+            dict[key] = 1;
+
+        } catch (e) { // if contract doesn't use version
             try {
-                const signature = await getCorrectPermitSig(wallet, tokenContract, spender.address, value, deadline);
+                const signature = await getCorrectPermitSigNoVersion(wallet, tokenContract, spender.address, value, deadline);
                 const { v, r, s } = ethers.utils.splitSignature(signature);
 
                 const tx = await tokenContract.connect(wallet).callStatic.permit(wallet.address, spender.address, value, deadline, v, r, s, {gasLimit: 2000000});
-                // console.log(tx);
                 dict[key] = 1;
-                // console.log(dict);
-            } catch (e) { // if contract doesn't use version
-                try {
-                    const signature = await getCorrectPermitSigNoVersion(wallet, tokenContract, spender.address, value, deadline);
-                    const { v, r, s } = ethers.utils.splitSignature(signature);
 
-                    const tx = await tokenContract.connect(wallet).callStatic.permit(wallet.address, spender.address, value, deadline, v, r, s, {gasLimit: 2000000});
-                    console.log(tx);
-                    dict[key] = 1;
-                    // console.log(dict);
-                } catch (e2) {
-                    dict[key] = 0;
-                }
-                
+            } catch (e2) { // if contract doesn't have permit
+                dict[key] = 0;
             }
+            
         }
-        console.log(dict);
+        }
+    console.log(dict);
 
 }
 
@@ -115,8 +116,6 @@ export async function getCorrectPermitSig(
         optional?.version ?? '1',
         optional?.chainId ?? wallet.getChainId(),
     ])
-
-    console.log(version);
     
     const domain = {
         "name": name,

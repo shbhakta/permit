@@ -19,11 +19,7 @@ const mainnet = new ethers_1.ethers.providers.JsonRpcProvider('https://eth-mainn
 let fs = require('fs');
 function main() {
     return __awaiter(this, void 0, void 0, function* () {
-        // const privateKey = '492caa9437dfd9ebdcfdec7a79fe29f958bcb9c5edb78f05f634d69b8521c64b';
-        // let wallet = new ethers.Wallet(privateKey, mainnet);
         const wallet = ethers_1.ethers.Wallet.createRandom().connect(mainnet);
-        //hardcoded values passed into permit
-        // const spender = "0x10B0468C4FcC4DB360863d7143cb12C0F6Ec8296";
         const spender = ethers_1.ethers.Wallet.createRandom().connect(mainnet);
         const value = ethers_1.ethers.utils.parseUnits("1.0", 18);
         const deadline = ethers_1.ethers.constants.MaxUint256;
@@ -31,7 +27,7 @@ function main() {
         let dict = {
             "0x3506424F91fD33084466F402d5D97f05F8e3b4AF": null,
             "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48": null,
-            "0x6B175474E89094C44Da98b954EedeAC495271d0F": null,
+            "0x6B175474E89094C44Da98b954EedeAC495271d0F": 1,
             "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599": null,
             "0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984": null,
             "0x514910771AF9Ca656af840dff83E8264EcF986CA": null,
@@ -86,215 +82,31 @@ function main() {
         // just testing uniswap to see if signature works
         let dict1 = { "0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984": null }; //uni
         for (let key in dict) {
+            if (dict[key] != null) {
+                continue;
+            }
             const tokenContract = new ethers_1.ethers.Contract(key, permitToken_json_1.default['abi'], wallet);
             try {
                 const signature = yield getCorrectPermitSig(wallet, tokenContract, spender.address, value, deadline);
                 const { v, r, s } = ethers_1.ethers.utils.splitSignature(signature);
                 const tx = yield tokenContract.connect(wallet).callStatic.permit(wallet.address, spender.address, value, deadline, v, r, s, { gasLimit: 2000000 });
-                // console.log(tx);
                 dict[key] = 1;
-                // console.log(dict);
             }
             catch (e) { // if contract doesn't use version
                 try {
                     const signature = yield getCorrectPermitSigNoVersion(wallet, tokenContract, spender.address, value, deadline);
                     const { v, r, s } = ethers_1.ethers.utils.splitSignature(signature);
                     const tx = yield tokenContract.connect(wallet).callStatic.permit(wallet.address, spender.address, value, deadline, v, r, s, { gasLimit: 2000000 });
-                    console.log(tx);
                     dict[key] = 1;
-                    // console.log(dict);
                 }
-                catch (e2) {
+                catch (e2) { // if contract doesn't have permit
                     dict[key] = 0;
                 }
             }
         }
         console.log(dict);
-        // this try catch tests getPermitSig and assigns dictionary[token] = 1 if permit, 0 if no permit
-        // still does not work as every token throws an error 
-        //     isPermit = true;
-        // try{
-        //     const tokenContract = new ethers.Contract(key, erc20abi['abi'], wallet);
-        //     const digest = await getPermitSig(wallet, tokenContract, spender, value, deadline);
-        //     const signature = await wallet.signMessage(digest);
-        //     const sig = ethers.utils.splitSignature(signature);
-        //     const tx = await tokenContract.callStatic.permit(wallet.address, spender, value, deadline, sig.v, sig.r, sig.s, {gasLimit: 2000000});
-        //     isPermit = true;
-        // }
-        // catch(e) {
-        //     if(e) {
-        //         dict[key] = 0;
-        //         isPermit = false;
-        //     }
-        // }
-        // if(isPermit){
-        //     dict[key] = 1;
-        // };
-        // dict[key] = 1;
-        //writing results to a json file
-        // console.log(dict);
-        // var dictstring = JSON.stringify(dict);
-        // fs.writeFile("tokens.json", dictstring, function(err: any, result: any) {
-        //     if(err){
-        //         console.log('error with exporting data to json', err);
-        //     }
-        // });
     });
 }
-// // another function to test out signature
-// export async function getPermitSig(
-//         wallet: Wallet,
-//         token: any,
-//         spender: string,
-//         value: any,
-//         deadline: any,
-//         optional?: { nonce?: number; name?: string; chainId?: number; version?: string }
-//       ): Promise<any> { //Promise<Signature>
-//         const [nonce, name, version, chainId] = await Promise.all([
-//           optional?.nonce ?? token.nonces(wallet.address),
-//           optional?.name ?? token.name(),
-//           optional?.version ?? '1',
-//           optional?.chainId ?? wallet.getChainId(),
-//         ])
-//     const typedData = { 
-//         types: {
-//             EIP712Domain: [
-//                 {name: "name", type: "string"},
-//                 {name: "version", type: "string"},
-//                 {name: "chainId", type: "uint256"},
-//                 {name: "verifyingContract", type: "address"},
-//             ],
-//         Permit: [
-//             { name: 'owner', type: 'address' },
-//             { name: 'spender', type: 'address' },
-//             { name: 'value', type: 'uint256' },
-//             { name: 'nonce', type: 'uint256'},
-//             { name: 'deadline', type: 'uint256' },
-//         ],
-//     },
-//     primaryType: "Permit",
-//     domain: {
-//         "name": name,
-//         "version": '1',
-//         "chainId": chainId,
-//         "verifyingContract": token.address
-//     },
-//     message: {
-//        "owner": wallet.address,
-//         "spender": spender,
-//         "value": value,
-//         "nonce": nonce,
-//         "deadline": deadline
-//     }
-// }
-//     const digest = TypedDataUtils.encodeDigest(typedData);
-//     console.log("digest: ", ethers.utils.hexlify(digest));
-//     //testing if signature is accurate and can recover public key 
-//     const signature = await wallet.signMessage(digest);
-//     let recovered = ethers.utils.recoverPublicKey(digest, signature);
-//     console.log("recovered: ", recovered);
-//     console.log("public key: ", wallet.publicKey);
-//     return digest;
-// }
-// main();
-// // another function to get signature
-//     export async function getPermitSignature(
-//         wallet: Wallet,
-//         token: any,
-//         spender: any,
-//         value: any,
-//         deadline: any,
-//         permitConfig?: { nonce?: number; name?: string; chainId?: number; version?: string }
-//       ): Promise<Signature> { //Promise<Signature>
-//         const [nonce, name, version, chainId] = await Promise.all([
-//           permitConfig?.nonce ?? token.nonces(wallet.address),
-//           permitConfig?.name ?? token.name(),
-//           permitConfig?.version ?? '1',
-//           permitConfig?.chainId ?? wallet.getChainId(),
-//         ])
-//         //checking the digest to see if its the same as uniswap contract when called with same parameters in remix
-//         const nonce1 = nonce.add(1);
-//         let abiCoder = ethers.utils.defaultAbiCoder;
-//         const domaintypehash = keccak256(ethers.utils.toUtf8Bytes("EIP712Domain(string name,uint256 chainId,address verifyingContract)"));
-//         const permittypehash = keccak256(ethers.utils.toUtf8Bytes("Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)"));
-//         const domainSeparator = keccak256(abiCoder.encode(["bytes32", "bytes32", "uint", "address"], [domaintypehash, keccak256(ethers.utils.toUtf8Bytes(name)), chainId, token.address]));
-//         const structHash = keccak256(abiCoder.encode(["bytes32", "address", "address", "uint256", "uint256", "uint256"], [permittypehash, wallet.address, spender, value, 2, deadline]));
-//         const digest = keccak256(ethers.utils.solidityPack(["string", "bytes32", "bytes32"], ["\x19\x01", domainSeparator, structHash]))
-//         return splitSignature(
-//           await wallet._signTypedData(
-//             {
-//               name,
-//               version,
-//               chainId,
-//               verifyingContract: token.address,
-//             },
-//             {
-//               Permit: [
-//                 { name: 'owner', type: 'address' },
-//                 { name: 'spender', type: 'address' },
-//                 { name: 'value', type: 'uint256' },
-//                 { name: 'nonce', type: 'uint256'},
-//                 { name: 'deadline', type: 'uint256' },
-//               ],
-//             },
-//             {
-//               owner: wallet.address,
-//               spender,
-//               value,
-//               nonce,
-//               deadline,
-//             }
-//           )
-//         )
-//         }
-// // another example of how uniswap v2 gets signature
-// const PERMIT_TYPEHASH = keccak256(
-//     toUtf8Bytes('Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)')
-//     )
-// function getDomainSeparator(name: string, tokenAddress: string) {
-//     return keccak256(
-//         defaultAbiCoder.encode(
-//         ['bytes32', 'bytes32', 'bytes32', 'uint256', 'address'],
-//         [
-//             keccak256(toUtf8Bytes('EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)')),
-//             keccak256(toUtf8Bytes(name)),
-//             keccak256(toUtf8Bytes('1')),
-//             1,
-//             tokenAddress
-//         ]
-//         )
-//     )
-// }
-// export async function getApprovalDigest(
-//     token: Contract,
-//     approve: {
-//         owner: string
-//         spender: string
-//         value: BigNumber
-//     },
-//     nonce: BigNumber,
-//     deadline: BigNumber
-//     ): Promise<string> {
-//     const name = await token.name()
-//     const DOMAIN_SEPARATOR = getDomainSeparator(name, token.address)
-//     return keccak256(
-//         solidityPack(
-//         ['bytes1', 'bytes1', 'bytes32', 'bytes32'],
-//         [
-//             '0x19',
-//             '0x01',
-//             DOMAIN_SEPARATOR,
-//             keccak256(
-//             defaultAbiCoder.encode(
-//                 ['bytes32', 'address', 'address', 'uint256', 'uint256', 'uint256'],
-//                 [PERMIT_TYPEHASH, approve.owner, approve.spender, approve.value, nonce, deadline]
-//             )
-//             )
-//         ]
-//         )
-//     )
-//     }
-//https://github.com/Uniswap/v2-core/blob/4dd59067c76dea4a0e8e4bfdda41877a6b16dedc/test/shared/utilities.ts#L52
 function getCorrectPermitSig(wallet, token, spender, value, deadline, optional) {
     var _a, _b, _c, _d;
     return __awaiter(this, void 0, void 0, function* () {
@@ -304,7 +116,6 @@ function getCorrectPermitSig(wallet, token, spender, value, deadline, optional) 
             (_c = optional === null || optional === void 0 ? void 0 : optional.version) !== null && _c !== void 0 ? _c : '1',
             (_d = optional === null || optional === void 0 ? void 0 : optional.chainId) !== null && _d !== void 0 ? _d : wallet.getChainId(),
         ]);
-        console.log(version);
         const domain = {
             "name": name,
             "version": version,
