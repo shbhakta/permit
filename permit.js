@@ -79,8 +79,6 @@ function main() {
             "0x9695e0114e12C0d3A3636fAb5A18e6b737529023": null,
             "0xcC926FCfB3eeB7E846D9D06072636022016DFc06": null, //elk 
         };
-        // just testing uniswap to see if signature works
-        let dict1 = { "0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984": null }; //uni
         for (let key in dict) {
             if (dict[key] != null) {
                 continue;
@@ -89,14 +87,14 @@ function main() {
             try {
                 const signature = yield getCorrectPermitSig(wallet, tokenContract, spender.address, value, deadline);
                 const { v, r, s } = ethers_1.ethers.utils.splitSignature(signature);
-                const tx = yield tokenContract.connect(wallet).callStatic.permit(wallet.address, spender.address, value, deadline, v, r, s, { gasLimit: 2000000 });
+                yield tokenContract.connect(wallet).callStatic.permit(wallet.address, spender.address, value, deadline, v, r, s, { gasLimit: 2000000 });
                 dict[key] = 1;
             }
             catch (e) { // if contract doesn't use version
                 try {
                     const signature = yield getCorrectPermitSigNoVersion(wallet, tokenContract, spender.address, value, deadline);
                     const { v, r, s } = ethers_1.ethers.utils.splitSignature(signature);
-                    const tx = yield tokenContract.connect(wallet).callStatic.permit(wallet.address, spender.address, value, deadline, v, r, s, { gasLimit: 2000000 });
+                    yield tokenContract.connect(wallet).callStatic.permit(wallet.address, spender.address, value, deadline, v, r, s, { gasLimit: 2000000 });
                     dict[key] = 1;
                 }
                 catch (e2) { // if contract doesn't have permit
