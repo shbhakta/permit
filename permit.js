@@ -12,8 +12,9 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getCorrectPermitSigNoVersion = exports.getCorrectPermitSig = void 0;
+exports.getDaiLikePermitSignature = exports.getCorrectPermitSigNoVersion = exports.getCorrectPermitSig = void 0;
 const permitToken_json_1 = __importDefault(require("./permitToken.json"));
+const daiPermitToken_json_1 = __importDefault(require("./daiPermitToken.json"));
 const ethers_1 = require("ethers");
 const mainnet = new ethers_1.ethers.providers.JsonRpcProvider('https://eth-mainnet.g.alchemy.com/v2/LThG2biL_4ShrIeKaTKYwdueeizg613D');
 let fs = require('fs');
@@ -27,7 +28,7 @@ function main() {
         let dict = {
             "0x3506424F91fD33084466F402d5D97f05F8e3b4AF": null,
             "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48": null,
-            "0x6B175474E89094C44Da98b954EedeAC495271d0F": 1,
+            "0x6B175474E89094C44Da98b954EedeAC495271d0F": null,
             "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599": null,
             "0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984": null,
             "0x514910771AF9Ca656af840dff83E8264EcF986CA": null,
@@ -97,8 +98,17 @@ function main() {
                     yield tokenContract.connect(wallet).callStatic.permit(wallet.address, spender.address, value, deadline, v, r, s, { gasLimit: 2000000 });
                     dict[key] = 1;
                 }
-                catch (e2) { // if contract doesn't have permit
-                    dict[key] = 0;
+                catch (e2) { // if contract uses Dai-like signature and permit call
+                    try {
+                        const daiTokenContract = new ethers_1.ethers.Contract(key, daiPermitToken_json_1.default, wallet);
+                        let signature = yield getDaiLikePermitSignature(wallet, daiTokenContract, spender.address, deadline);
+                        const { v, r, s } = ethers_1.ethers.utils.splitSignature(signature[0]);
+                        yield daiTokenContract.connect(wallet).callStatic.permit(wallet.address, spender.address, signature[1], deadline, true, v, r, s, { gasLimit: 2000000 });
+                        dict[key] = 1;
+                    }
+                    catch (e) { // if contract doesn't have permit
+                        dict[key] = 0;
+                    }
                 }
             }
         }
@@ -175,5 +185,40 @@ function getCorrectPermitSigNoVersion(wallet, token, spender, value, deadline, o
     });
 }
 exports.getCorrectPermitSigNoVersion = getCorrectPermitSigNoVersion;
+function getDaiLikePermitSignature(wallet, token, spender, deadline, optional) {
+    var _a, _b, _c;
+    return __awaiter(this, void 0, void 0, function* () {
+        const [nonce, name, chainId] = yield Promise.all([
+            (_a = optional === null || optional === void 0 ? void 0 : optional.nonce) !== null && _a !== void 0 ? _a : token.nonces(wallet.address),
+            (_b = optional === null || optional === void 0 ? void 0 : optional.name) !== null && _b !== void 0 ? _b : token.name(),
+            (_c = optional === null || optional === void 0 ? void 0 : optional.chainId) !== null && _c !== void 0 ? _c : wallet.getChainId(),
+        ]);
+        const domain = {
+            "name": name,
+            "version": "1",
+            "chainId": chainId,
+            "verifyingContract": token.address
+        };
+        const types = {
+            Permit: [
+                { name: 'holder', type: 'address' },
+                { name: 'spender', type: 'address' },
+                { name: 'nonce', type: 'uint256' },
+                { name: 'expiry', type: 'uint256' },
+                { name: 'allowed', type: 'bool' },
+            ],
+        };
+        const message = {
+            holder: wallet.address,
+            spender: spender,
+            nonce: nonce,
+            expiry: deadline,
+            allowed: true
+        };
+        const sig = yield wallet._signTypedData(domain, types, message);
+        return [sig, nonce];
+    });
+}
+exports.getDaiLikePermitSignature = getDaiLikePermitSignature;
 main();
 //# sourceMappingURL=permit.js.map

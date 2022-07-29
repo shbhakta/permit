@@ -1,14 +1,13 @@
-// import abi from "../permit/artifacts/@openzeppelin/contracts/token/ERC20/extensions/draft-IERC20Permit.sol/IERC20Permit.json";
-import erc20abi from "./abi.json";
-import permitTokenAbi from "./permitToken.json";
+import permitToken from "./permitToken.json";
+import daiPermitToken from "./daiPermitToken.json";
 import { ethers } from "ethers";
-const mainnet = new ethers.providers.JsonRpcProvider('https://eth-mainnet.g.alchemy.com/v2/LThG2biL_4ShrIeKaTKYwdueeizg613D');
-let fs = require('fs');
 import { Wallet } from 'ethers'
+
+const mainnet = new ethers.providers.JsonRpcProvider('https://eth-mainnet.g.alchemy.com/v2/LThG2biL_4ShrIeKaTKYwdueeizg613D');
+
 async function main() {
 
     const wallet = ethers.Wallet.createRandom().connect(mainnet);
-
     const spender = ethers.Wallet.createRandom().connect(mainnet);
     const value = ethers.utils.parseUnits("1.0", 18);
     const deadline = ethers.constants.MaxUint256;
@@ -17,7 +16,7 @@ async function main() {
     let dict = {
         "0x3506424F91fD33084466F402d5D97f05F8e3b4AF": null, //tether
         "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48": null, // usdc
-        "0x6B175474E89094C44Da98b954EedeAC495271d0F": 1, //dai
+        "0x6B175474E89094C44Da98b954EedeAC495271d0F": null, //dai
         "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599": null, //wbtc
         "0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984": null, //uni
         "0x514910771AF9Ca656af840dff83E8264EcF986CA": null, //chainlink
@@ -74,7 +73,7 @@ async function main() {
         if(dict[key] != null){
             continue;
         }
-        const tokenContract = new ethers.Contract(key, permitTokenAbi['abi'], wallet);
+        const tokenContract = new ethers.Contract(key, permitToken['abi'], wallet);
         try {
             const signature = await getCorrectPermitSig(wallet, tokenContract, spender.address, value, deadline);
             const { v, r, s } = ethers.utils.splitSignature(signature);
@@ -90,10 +89,20 @@ async function main() {
                 await tokenContract.connect(wallet).callStatic.permit(wallet.address, spender.address, value, deadline, v, r, s, {gasLimit: 2000000});
                 dict[key] = 1;
 
-            } catch (e2) { // if contract doesn't have permit
-                dict[key] = 0;
+            } catch (e2) { // if contract uses Dai-like signature and permit call
+                try {
+                    const daiTokenContract = new ethers.Contract(key, daiPermitToken, wallet); 
+
+                    let signature = await getDaiLikePermitSignature(wallet, daiTokenContract, spender.address, deadline);
+                    const { v, r, s } = ethers.utils.splitSignature(signature[0]);
+
+                    await daiTokenContract.connect(wallet).callStatic.permit(wallet.address, spender.address, signature[1], deadline, true, v, r, s, {gasLimit: 2000000});
+                    dict[key] = 1;
+                }
+                catch(e) { // if contract doesn't have permit
+                    dict[key] = 0;
+                }
             }
-            
         }
     }
     console.log(dict);
@@ -184,6 +193,48 @@ export async function getCorrectPermitSigNoVersion(
     
     const sig = await wallet._signTypedData(domain, types, message);
     return sig;
+}
+
+export async function getDaiLikePermitSignature(
+    wallet: Wallet,
+    token: any,
+    spender: string,
+    deadline: any,
+    optional?: { nonce?: number; name?: string; chainId?: number;}
+    ) { 
+    const [nonce, name, chainId] = await Promise.all([
+        optional?.nonce ?? token.nonces(wallet.address),
+        optional?.name ?? token.name(),
+        optional?.chainId ?? wallet.getChainId(),
+    ])
+    
+    const domain = {
+        "name": name,
+        "version": "1", 
+        "chainId": chainId,
+        "verifyingContract": token.address
+    };
+    
+    const types = {
+        Permit: [
+        { name: 'holder', type: 'address' },
+        { name: 'spender', type: 'address' },
+        { name: 'nonce', type: 'uint256' },
+        { name: 'expiry', type: 'uint256'},
+        { name: 'allowed', type: 'bool' },
+    ],
+    }
+    
+    const message = {
+            holder: wallet.address,
+            spender: spender,
+            nonce: nonce,
+            expiry: deadline,
+            allowed: true
+    };
+    
+    const sig = await wallet._signTypedData(domain, types, message);
+    return [sig, nonce];
 }
 
 main();
