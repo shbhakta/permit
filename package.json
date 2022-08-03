@@ -1,8 +1,12 @@
 {
   "dependencies": {
+    "@makerdao/multicall": "^0.12.0",
     "chai": "^4.3.6",
     "eth-permit": "^0.2.1",
+    "ethereum-bsc-multicall": "^2.0.3",
+    "ethereum-multicall": "^2.14.0",
     "ethers": "^5.6.9",
-    "ethers-eip712": "^0.2.0"
+    "ethers-eip712": "^0.2.0",
+    "ethers-multicall": "^0.2.3"
   }
 }
